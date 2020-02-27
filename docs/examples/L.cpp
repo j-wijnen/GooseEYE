@@ -8,8 +8,8 @@ int main()
     xt::xarray<int> I = GooseEYE::dummy_circles({50, 50});
     double phi = xt::mean(I)();
 
-    // 2-point probability
-    xt::xarray<double> S2 = GooseEYE::S2({11, 11}, I, I);
+    // lineal path function
+    xt::xarray<double> L = GooseEYE::L({11, 11}, I);
 
     return 0;
 }

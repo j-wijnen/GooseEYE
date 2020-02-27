@@ -53,9 +53,51 @@ xt::xarray<int> dummy_circles(
 
 xt::xarray<int> dummy_circles(
   const std::vector<size_t>& shape,
-  const std::vector<int>& row,
-  const std::vector<int>& col,
-  const std::vector<int>& r,
+  const xt::xtensor<int,1>& row,
+  const xt::xtensor<int,1>& col,
+  const xt::xtensor<int,1>& r,
+  bool periodic=true);
+
+// -------------------------------------------------------------------------------------------------
+// Dilate image
+// -------------------------------------------------------------------------------------------------
+
+// dilate image
+template <
+  class T,
+  class S,
+  std::enable_if_t<std::is_integral<T>::value, int> = 0,
+  std::enable_if_t<std::is_integral<S>::value, int> = 0>
+xt::xarray<T> dilate(
+  const xt::xarray<T>& f,
+  const xt::xarray<S>& kernel,
+  const xt::xtensor<size_t,1>& iterations,
+  bool periodic=true);
+
+// dilate image, with "kernel::nearest"
+template <class T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
+xt::xarray<T> dilate(
+  const xt::xarray<T>& f,
+  const xt::xtensor<size_t,1>& iterations,
+  bool periodic=true);
+
+// dilate image
+template <
+  class T,
+  class S,
+  std::enable_if_t<std::is_integral<T>::value, int> = 0,
+  std::enable_if_t<std::is_integral<S>::value, int> = 0>
+xt::xarray<T> dilate(
+  const xt::xarray<T>& f,
+  const xt::xarray<S>& kernel,
+  size_t iterations=1,
+  bool periodic=true);
+
+// dilate image, with "kernel::nearest"
+template <class T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
+xt::xarray<T> dilate(
+  const xt::xarray<T>& f,
+  size_t iterations=1,
   bool periodic=true);
 
 // -------------------------------------------------------------------------------------------------
@@ -84,8 +126,11 @@ public:
   // Return label only in the center of gravity
   xt::xarray<int> centers() const;
 
-  // Return positions of the centers of gravity (as 3-d, or in original rank)
-  xt::xtensor<double,2> center_positions(bool orig_rank=true) const;
+  // Return positions of the centers of gravity (in the original rank, or as 3-d)
+  xt::xtensor<double,2> center_positions(bool as3d=false) const;
+
+  // Return size per cluster
+  xt::xtensor<size_t,1> sizes() const;
 
 private:
 
@@ -234,6 +279,23 @@ public:
     const xt::xarray<T>& f,
     const xt::xarray<int>& fmask);
 
+  // Collapsed weighted 2-point correlation
+
+  template <class T>
+  void W2c(
+    const xt::xarray<int>& clusters,
+    const xt::xarray<int>& centers,
+    const xt::xarray<T>& f,
+    path_mode mode=path_mode::Bresenham);
+
+  template <class T>
+  void W2c(
+    const xt::xarray<int>& clusters,
+    const xt::xarray<int>& centers,
+    const xt::xarray<T>& f,
+    const xt::xarray<int>& fmask,
+    path_mode mode=path_mode::Bresenham);
+
   // Height-Height Correlation function
 
   template <class T>
@@ -359,6 +421,27 @@ xt::xarray<double> W2(
   const xt::xarray<int>& fmask,
   bool periodic=true);
 
+// Collapsed weighted 2-point correlation
+
+template <class T>
+xt::xarray<double> W2c(
+  const std::vector<size_t>& roi,
+  const xt::xarray<int>& clusters,
+  const xt::xarray<int>& centers,
+  const xt::xarray<T>& f,
+  path_mode mode=path_mode::Bresenham,
+  bool periodic=true);
+
+template <class T>
+xt::xarray<double> W2c(
+  const std::vector<size_t>& roi,
+  const xt::xarray<int>& clusters,
+  const xt::xarray<int>& centers,
+  const xt::xarray<T>& f,
+  const xt::xarray<int>& fmask,
+  path_mode mode=path_mode::Bresenham,
+  bool periodic=true);
+
 // Height-Height Correlation Function
 
 template <class T>
@@ -393,12 +476,14 @@ xt::xarray<double> L(
 #include "GooseEYE.hpp"
 #include "dummy_circles.hpp"
 #include "kernel.hpp"
+#include "dilate.hpp"
 #include "clusters.hpp"
 #include "Ensemble.hpp"
 #include "Ensemble_mean.hpp"
 #include "Ensemble_S2.hpp"
 #include "Ensemble_C2.hpp"
 #include "Ensemble_W2.hpp"
+#include "Ensemble_W2c.hpp"
 #include "Ensemble_heightheight.hpp"
 #include "Ensemble_L.hpp"
 

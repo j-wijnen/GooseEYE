@@ -4,25 +4,31 @@
 
 ================================================================================================= */
 
-#ifndef GOOSEEYE_ENSEMBLE_L_HPP
-#define GOOSEEYE_ENSEMBLE_L_HPP
+#ifndef GOOSEEYE_ENSEMBLE_W2C_HPP
+#define GOOSEEYE_ENSEMBLE_W2C_HPP
 
 #include "GooseEYE.h"
 
 namespace GooseEYE {
 
-// -------------------------------------------------------------------------------------------------
 
-template <class T, std::enable_if_t<std::is_integral<T>::value, int>>
-inline void Ensemble::L(
-  const xt::xarray<T>& f,
-  path_mode mode)
+template <class T>
+inline void Ensemble::W2c(
+    const xt::xarray<int>& clusters,
+    const xt::xarray<int>& centers,
+    const xt::xarray<T>& f,
+    const xt::xarray<int>& fmask,
+    path_mode mode)
 {
+  GOOSEEYE_ASSERT(f.shape() == clusters.shape());
+  GOOSEEYE_ASSERT(f.shape() == centers.shape());
+  GOOSEEYE_ASSERT(f.shape() == fmask.shape());
   GOOSEEYE_ASSERT(f.dimension() == m_shape.size());
-  GOOSEEYE_ASSERT(m_stat == Type::L || m_stat == Type::Unset);
+  GOOSEEYE_ASSERT(xt::all(xt::equal(fmask,0) || xt::equal(fmask,1)));
+  GOOSEEYE_ASSERT(m_stat == Type::W2c || m_stat == Type::Unset);
 
-  // lock statistics
-  m_stat = Type::L;
+  // lock statistic
+  m_stat = Type::W2c;
 
   // padding default not periodic: mask padded items
   xt::pad_mode pad_mode = xt::pad_mode::constant;
@@ -34,6 +40,9 @@ inline void Ensemble::L(
 
   // apply padding
   xt::xarray<T> F = xt::pad(f, m_pad, pad_mode);
+  xt::xarray<int> Fmask = xt::pad(fmask, m_pad, pad_mode);
+  xt::xarray<int> Clusters = xt::pad(clusters, m_pad, pad_mode);
+  xt::xarray<int> Centers = xt::pad(centers, m_pad, pad_mode);
 
   // make matrices virtually 3-d matrices
   std::vector<size_t> shape = detail::shape_as_dim(MAX_DIM, F, 1);
@@ -41,7 +50,7 @@ inline void Ensemble::L(
 
   // local output and normalisation
   xt::xarray<T> first = xt::zeros<T>(m_Shape);
-  xt::xarray<T> norm = xt::zeros<T>(m_Shape);
+  xt::xarray<int> norm = xt::zeros<int>(m_Shape);
 
   // ROI-shaped array used to extract a pixel stamp:
   // a set of end-points over which to loop and check the statics
@@ -69,31 +78,48 @@ inline void Ensemble::L(
       {stamp(istamp, 0), stamp(istamp, 1), stamp(istamp, 2)},
       mode);
 
-    // compute correlation along this path, for the entire image
     for (size_t h = m_Pad[0][0]; h < shape[0] - m_Pad[0][1]; ++h) {
       for (size_t i = m_Pad[1][0]; i < shape[1] - m_Pad[1][1]; ++i) {
         for (size_t j = m_Pad[2][0]; j < shape[2] - m_Pad[2][1]; ++j) {
+
+          auto label = Centers(h, i, j);
+          int q = -1;
+
+          // proceed only when the centre is inside the cluster
+          if (!label || Clusters(h, i, j) != label) {
+            continue;
+          }
+
           for (size_t p = 0; p < path.shape(0); ++p) {
-            // - get current relative position
+
             int dh = path(p, 0);
             int di = path(p, 1);
             int dj = path(p, 2);
-            // - check to terminal walking along this path
-            if (!F(h + dh, i + di, j + dj))
-              break;
-            // - update the result
-            first(m_Pad[0][0] + dh, m_Pad[1][0] + di, m_Pad[2][0] + dj) += 1.0;
+
+            // loop through the voxel-path until the end of a cluster
+            if (Clusters(h + dh, i + di, j + dj) != label && q < 0) {
+              q = 0;
+            }
+
+            // loop from the beginning of the path and store there
+            if (q >= 0) {
+              if (!Fmask(h + dh, i + di, j + dj) ) {
+                norm(
+                  m_Pad[0][0] + path(q, 0),
+                  m_Pad[1][0] + path(q, 1),
+                  m_Pad[1][0] + path(q, 2)) += 1;
+
+                first(
+                  m_Pad[0][0] + path(q, 0),
+                  m_Pad[1][0] + path(q, 1),
+                  m_Pad[1][0] + path(q, 2)) += F(h + dh, i + di, j + dj);
+              }
+            }
+
+            q++;
           }
         }
       }
-    }
-
-    // normalisation
-    for (size_t p = 0; p < path.shape(0); ++p) {
-      int dh = path(p, 0);
-      int di = path(p, 1);
-      int dj = path(p, 2);
-      norm(m_Pad[0][0] + dh, m_Pad[1][0] + di, m_Pad[2][0] + dj) += f.size();
     }
   }
 
@@ -101,7 +127,18 @@ inline void Ensemble::L(
   m_norm += norm;
 }
 
-// -------------------------------------------------------------------------------------------------
+
+template <class T>
+inline void Ensemble::W2c(
+    const xt::xarray<int>& clusters,
+    const xt::xarray<int>& centers,
+    const xt::xarray<T>& f,
+    path_mode mode)
+{
+  xt::xarray<int> mask = xt::zeros<int>(f.shape());
+  W2c(clusters, centers, f, mask, mode);
+}
+
 
 } // namespace ...
 
